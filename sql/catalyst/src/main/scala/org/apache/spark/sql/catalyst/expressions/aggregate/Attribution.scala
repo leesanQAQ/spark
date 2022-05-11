@@ -359,9 +359,14 @@ case class Attribution(windowLitExpr: Expression,
           updateMeasures(target, e)
         }
       case POSITION =>
-        if (sourceEvents.size < 3) {
+        if (sourceEvents.size == 1) {
           sourceEvents.foreach { e =>
-            e.contrib += 0.4
+            e.contrib += 1
+            updateMeasures(target, e)
+          }
+        } else if (sourceEvents.size == 2) {
+          sourceEvents.foreach { e =>
+            e.contrib += 0.5
             updateMeasures(target, e)
           }
         } else {
@@ -377,7 +382,7 @@ case class Attribution(windowLitExpr: Expression,
           }
         }
       case DECAY =>
-        var contrib = 1.0
+        var contrib = 0.5
         val oneWeek = 7 * 24 * 60 * 60 * 1000
         var windowStart = target.ts - oneWeek // inclusive
         sourceEvents.reverseIterator.foreach { e =>
@@ -468,6 +473,7 @@ case class AttrEvent(name: String,
   // override hashcode otherwise changes in contrib field will affect the hashCode
   override def hashCode(): Int = System.identityHashCode(this)
 
+  override def equals(obj: scala.Any) = obj.hashCode() == this.hashCode()
 }
 
 object AttrEvent {
@@ -484,16 +490,16 @@ private object EvalHelper {
       case _: NumericType =>
         expr.eval(input).toString.toLong
       case _: TimestampType =>
-        expr.eval(input).toString.toLong / 1000000
+        expr.eval(input).toString.toLong / 1000
       case _: NullType =>
         -1L
       case _ =>
         // timezone doesn't really matter here
-        val tsColumn = Cast(Cast(expr, TimestampType, Some("UTC")), LongType).eval(input)
+        val tsColumn = Cast(expr, TimestampType, Some("UTC")).eval(input)
         if (tsColumn == null) {
           return expr.eval(input).toString.toLong
         }
-        tsColumn.toString.toLong
+        tsColumn.toString.toLong / 1000
     }
   }
 
