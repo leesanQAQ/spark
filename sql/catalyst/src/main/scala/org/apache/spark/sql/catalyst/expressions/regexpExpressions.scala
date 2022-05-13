@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.text.StringEscapeUtils
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -527,7 +528,7 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression, pos: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant with Logging{
 
   def this(subject: Expression, regexp: Expression, rep: Expression) =
     this(subject, regexp, rep, Literal(1))
@@ -555,28 +556,20 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   // result buffer write by Matcher
   @transient private lazy val result: StringBuffer = new StringBuffer
 
+  def getStr(str: Any): String = {
+    if (str == null) {
+      ""
+    } else {
+      str.toString
+    }
+  }
+
   override def nullSafeEval(s: Any, p: Any, r: Any, i: Any): Any = {
-    if (!p.equals(lastRegex)) {
-      // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String].clone()
-      pattern = Pattern.compile(lastRegex.toString)
-    }
-    if (!r.equals(lastReplacementInUTF8)) {
-      // replacement string changed
-      lastReplacementInUTF8 = r.asInstanceOf[UTF8String].clone()
-      lastReplacement = lastReplacementInUTF8.toString
-    }
-    val source = s.toString()
-    val position = i.asInstanceOf[Int] - 1
-    if (position < source.length) {
-      val m = pattern.matcher(source)
-      m.region(position, source.length)
-      result.delete(0, result.length())
-      while (m.find) {
-        m.appendReplacement(result, lastReplacement)
-      }
-      m.appendTail(result)
-      UTF8String.fromString(result.toString)
+    logInfo(p.toString)
+    logInfo("12344565")
+    if (s != null) {
+      val ss = UTF8String.fromString(s.toString.replaceAll(getStr(p), getStr(r)))
+      ss
     } else {
       s
     }
@@ -610,33 +603,20 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, rep, pos) => {
     s"""
-      if (!$regexp.equals($termLastRegex)) {
-        // regex value changed
-        $termLastRegex = $regexp.clone();
-        $termPattern = $classNamePattern.compile($termLastRegex.toString());
-      }
-      if (!$rep.equals($termLastReplacementInUTF8)) {
-        // replacement string changed
-        $termLastReplacementInUTF8 = $rep.clone();
-        $termLastReplacement = $termLastReplacementInUTF8.toString();
-      }
-      String $source = $subject.toString();
-      int $position = $pos - 1;
-      if ($position < $source.length()) {
-        $classNameStringBuffer $termResult = new $classNameStringBuffer();
-        java.util.regex.Matcher $matcher = $termPattern.matcher($source);
-        $matcher.region($position, $source.length());
-
-        while ($matcher.find()) {
-          $matcher.appendReplacement($termResult, $termLastReplacement);
+      if ($subject != null ) {
+          String regexpStr = "";
+          if ($regexp != null) {
+            regexpStr = $regexp.toString();
+          }
+          String replaceStr = "";
+          if ($rep != null) {
+            replaceStr = $rep.toString();
+          }
+          ${ev.value} = UTF8String.fromString($subject.toString()
+            .replaceAll(regexpStr, replaceStr));
+        } else {
+          ${ev.value} = $subject;
         }
-        $matcher.appendTail($termResult);
-        ${ev.value} = UTF8String.fromString($termResult.toString());
-        $termResult = null;
-      } else {
-        ${ev.value} = $subject;
-      }
-      $setEvNotNull
     """
     })
   }

@@ -1309,7 +1309,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
       case TypeCheckSuccess =>
-        if (scale.foldable) {
+        if (scale.isInstanceOf[Expression] || scale.foldable) {
           TypeCheckSuccess
         } else {
           TypeCheckFailure("Only foldable Expression is allowed for scale arguments")
