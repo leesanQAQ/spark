@@ -559,7 +559,14 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     if (!p.equals(lastRegex)) {
       // regex value changed
       lastRegex = p.asInstanceOf[UTF8String].clone()
-      pattern = Pattern.compile(lastRegex.toString)
+      val lastRegexStr = lastRegex.toString
+      val array = lastRegexStr.toCharArray
+      val buffer = new StringBuffer()
+      for (i <- 0 until array.length) {
+        if (array(i) == ')' && (i == 0 || array(i - 1) != '\\')) buffer.append("\\")
+        buffer.append(array(i))
+      }
+      pattern = Pattern.compile(buffer.toString())
     }
     if (!r.equals(lastReplacementInUTF8)) {
       // replacement string changed
@@ -613,7 +620,15 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       if (!$regexp.equals($termLastRegex)) {
         // regex value changed
         $termLastRegex = $regexp.clone();
-        $termPattern = $classNamePattern.compile($termLastRegex.toString());
+        char[] array = $termLastRegex.toString().toCharArray();
+        StringBuffer buffer = new StringBuffer();
+        for (int i = 0; i < array.length; i++) {
+            if (array[i] == ')' && (i == 0 || array[i - 1] != '\\')) {
+                buffer.append("\\");
+            }
+            buffer.append(array[i]);
+        }
+        $termPattern = $classNamePattern.compile(buffer.toString());
       }
       if (!$rep.equals($termLastReplacementInUTF8)) {
         // replacement string changed
