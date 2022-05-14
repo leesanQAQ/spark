@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.text.StringEscapeUtils
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -527,7 +528,7 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression, pos: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant with Logging {
 
   def this(subject: Expression, regexp: Expression, rep: Expression) =
     this(subject, regexp, rep, Literal(1))
@@ -556,10 +557,16 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   @transient private lazy val result: StringBuffer = new StringBuffer
 
   override def nullSafeEval(s: Any, p: Any, r: Any, i: Any): Any = {
+    logInfo("jinlail")
+    logInfo("i=" + i.toString)
+    if (p != null && p.toString().equals("")) {
+      val ss = s.toString().replaceAll("", r.asInstanceOf[UTF8String].toString())
+      return UTF8String.fromString(ss)
+    }
     if (!p.equals(lastRegex)) {
       // regex value changed
       lastRegex = p.asInstanceOf[UTF8String].clone()
-      pattern = Pattern.compile(lastRegex.toString)
+      pattern = Pattern.compile(lastRegex.toString.replaceAll("\\)", "\\\\)"))
     }
     if (!r.equals(lastReplacementInUTF8)) {
       // replacement string changed
@@ -569,6 +576,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     val source = s.toString()
     val position = i.asInstanceOf[Int] - 1
     if (position < source.length) {
+      logInfo("jinlail2")
+      logInfo("position=" + position)
       val m = pattern.matcher(source)
       m.region(position, source.length)
       result.delete(0, result.length())
@@ -578,6 +587,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       m.appendTail(result)
       UTF8String.fromString(result.toString)
     } else {
+      logInfo("jinlail3")
       s
     }
   }
@@ -610,31 +620,42 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, rep, pos) => {
     s"""
-      if (!$regexp.equals($termLastRegex)) {
-        // regex value changed
-        $termLastRegex = $regexp.clone();
-        $termPattern = $classNamePattern.compile($termLastRegex.toString());
-      }
-      if (!$rep.equals($termLastReplacementInUTF8)) {
-        // replacement string changed
-        $termLastReplacementInUTF8 = $rep.clone();
-        $termLastReplacement = $termLastReplacementInUTF8.toString();
-      }
-      String $source = $subject.toString();
-      int $position = $pos - 1;
-      if ($position < $source.length()) {
-        $classNameStringBuffer $termResult = new $classNameStringBuffer();
-        java.util.regex.Matcher $matcher = $termPattern.matcher($source);
-        $matcher.region($position, $source.length());
-
-        while ($matcher.find()) {
-          $matcher.appendReplacement($termResult, $termLastReplacement);
-        }
-        $matcher.appendTail($termResult);
-        ${ev.value} = UTF8String.fromString($termResult.toString());
-        $termResult = null;
+        System.out.println("jinlail5");
+        System.out.println("position=" + $pos);
+      if ("".equals($regexp)) {
+        String ss = subject.toString().replaceAll("", r.toString());
+        ${ev.value} = UTF8String.fromString(ss);
       } else {
-        ${ev.value} = $subject;
+        if (!$regexp.equals($termLastRegex)) {
+          // regex value changed
+          $termLastRegex = $regexp.clone();
+          $termPattern = $classNamePattern
+            .compile($termLastRegex.toString().replaceAll("\\\\)", "\\\\\\\\)"));
+        }
+        if (!$rep.equals($termLastReplacementInUTF8)) {
+          // replacement string changed
+          $termLastReplacementInUTF8 = $rep.clone();
+          $termLastReplacement = $termLastReplacementInUTF8.toString();
+        }
+        String $source = $subject.toString();
+        int $position = $pos - 1;
+        if ($position < $source.length()) {
+          System.out.println("jinlail6");
+          System.out.println("position=" + $position);
+          $classNameStringBuffer $termResult = new $classNameStringBuffer();
+          java.util.regex.Matcher $matcher = $termPattern.matcher($source);
+          $matcher.region($position, $source.length());
+
+          while ($matcher.find()) {
+            $matcher.appendReplacement($termResult, $termLastReplacement);
+          }
+          $matcher.appendTail($termResult);
+          ${ev.value} = UTF8String.fromString($termResult.toString());
+          $termResult = null;
+        } else {
+          System.out.println("jinlail7");
+          ${ev.value} = $subject;
+        }
       }
       $setEvNotNull
     """
