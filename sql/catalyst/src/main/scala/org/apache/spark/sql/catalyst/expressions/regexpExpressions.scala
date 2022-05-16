@@ -619,48 +619,41 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       ""
     }
 
-    val specialSymbol = "$"
     nullSafeCodeGen(ctx, ev, (subject, regexp, rep, pos) => {
     s"""
-      if ($rep.toString().contains("$specialSymbol") || $regexp.toString()
-        .contains("$specialSymbol")) {
-        ${ev.value} = UTF8String.fromString(
-          $subject.toString().replace($regexp.toString(), $rep.toString()));
-      } else {
-        if (!$regexp.equals($termLastRegex)) {
-          // regex value changed
-          $termLastRegex = $regexp.clone();
-          char[] array = $termLastRegex.toString().toCharArray();
-          StringBuffer buffer = new StringBuffer();
-          for (int k = 0; k < array.length; k++) {
-              if (array[k] == ')' && (k == 0 || array[k - 1] != '\\\\')) {
-                  buffer.append("\\\\");
-              }
-              buffer.append(array[k]);
-          }
-          $termPattern = $classNamePattern.compile(buffer.toString());
+      if (!$regexp.equals($termLastRegex)) {
+        // regex value changed
+        $termLastRegex = $regexp.clone();
+        char[] array = $termLastRegex.toString().toCharArray();
+        StringBuffer buffer = new StringBuffer();
+        for (int i = 0; i < array.length; i++) {
+            if (array[i] == ')' && (i == 0 || array[i - 1] != '\\')) {
+                buffer.append("\\");
+            }
+            buffer.append(array[i]);
         }
-        if (!$rep.equals($termLastReplacementInUTF8)) {
-          // replacement string changed
-          $termLastReplacementInUTF8 = $rep.clone();
-          $termLastReplacement = $termLastReplacementInUTF8.toString();
-        }
-        String $source = $subject.toString();
-        int $position = $pos - 1;
-        if ($position < $source.length()) {
-          $classNameStringBuffer $termResult = new $classNameStringBuffer();
-          java.util.regex.Matcher $matcher = $termPattern.matcher($source);
-          $matcher.region($position, $source.length());
+        $termPattern = $classNamePattern.compile(buffer.toString());
+      }
+      if (!$rep.equals($termLastReplacementInUTF8)) {
+        // replacement string changed
+        $termLastReplacementInUTF8 = $rep.clone();
+        $termLastReplacement = $termLastReplacementInUTF8.toString();
+      }
+      String $source = $subject.toString();
+      int $position = $pos - 1;
+      if ($position < $source.length()) {
+        $classNameStringBuffer $termResult = new $classNameStringBuffer();
+        java.util.regex.Matcher $matcher = $termPattern.matcher($source);
+        $matcher.region($position, $source.length());
 
-          while ($matcher.find()) {
-            $matcher.appendReplacement($termResult, $termLastReplacement);
-          }
-          $matcher.appendTail($termResult);
-          ${ev.value} = UTF8String.fromString($termResult.toString());
-          $termResult = null;
-        } else {
-          ${ev.value} = $subject;
+        while ($matcher.find()) {
+          $matcher.appendReplacement($termResult, $termLastReplacement);
         }
+        $matcher.appendTail($termResult);
+        ${ev.value} = UTF8String.fromString($termResult.toString());
+        $termResult = null;
+      } else {
+        ${ev.value} = $subject;
       }
       $setEvNotNull
     """
