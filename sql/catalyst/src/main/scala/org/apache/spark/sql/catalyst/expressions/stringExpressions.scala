@@ -526,8 +526,11 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   }
 
   override def nullSafeEval(srcEval: Any, searchEval: Any, replaceEval: Any): Any = {
-    srcEval.asInstanceOf[UTF8String].replace(
-      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String])
+    val s = srcEval.asInstanceOf[UTF8String].clone().toString().replace(
+      searchEval.asInstanceOf[UTF8String].clone().toString()
+      , replaceEval.asInstanceOf[UTF8String].clone().toString())
+    val ss = UTF8String.fromString(s)
+    ss
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
