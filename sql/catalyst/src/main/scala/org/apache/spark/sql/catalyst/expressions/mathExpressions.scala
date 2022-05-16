@@ -1371,13 +1371,14 @@ abstract class RoundBase(child: Expression, scale: Expression,
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val ce = child.genCode(ctx)
-
+    val modeStr = "ROUND_DOWN"
     val evaluationCode = dataType match {
       case DecimalType.Fixed(_, s) =>
         s"""
-           |${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
-           |  Decimal.$modeStr(), true);
-           |${ev.isNull} = ${ev.value} == null;
+           |java.math.BigDecimal dec1 = ${ce.value}.toJavaBigDecimal().movePointRight(${_scale})
+           |          .setScale(0, java.math.BigDecimal.${modeStr}).movePointLeft(${_scale});
+           |        ${ev.value} = new Decimal().set(scala.math.BigDecimal.exact(dec1));
+           |        ${ev.isNull} = ${ev.value} == null;
          """.stripMargin
       case ByteType =>
         if (_scale < 0) {
