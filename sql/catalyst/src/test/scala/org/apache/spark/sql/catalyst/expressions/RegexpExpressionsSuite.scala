@@ -305,6 +305,9 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val regReplaceStr2 = RegExpReplace(Literal("abc$"), Literal("$"), Literal("vv"))
     assert(regReplaceStr2.eval(null).equals(UTF8String.fromString("abcvv")))
 
+    val regReplaceStr3 = RegExpReplace(Literal(""), Literal(""), Literal("vv"))
+    assert(regReplaceStr3.eval(null).equals(UTF8String.fromString("vv")))
+
     val expr = RegExpReplace(s, p, r)
     checkEvaluation(expr, "num-num", row1)
     checkEvaluation(expr, "###-###", row2)
