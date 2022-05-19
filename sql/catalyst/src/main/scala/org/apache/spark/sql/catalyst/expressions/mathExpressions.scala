@@ -1371,7 +1371,6 @@ abstract class RoundBase(child: Expression, scale: Expression,
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val ce = child.genCode(ctx)
-    val modeStr = "ROUND_DOWN"
     val evaluationCode = dataType match {
       case DecimalType.Fixed(_, s) =>
         s"""
