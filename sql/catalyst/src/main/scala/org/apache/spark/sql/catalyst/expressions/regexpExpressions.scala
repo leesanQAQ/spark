@@ -18,13 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
-import java.util.regex.{Matcher, MatchResult, Pattern}
+import java.util.regex.{MatchResult, Matcher, Pattern, PatternSyntaxException}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.commons.text.StringEscapeUtils
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -556,21 +554,27 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   @transient private lazy val result: StringBuffer = new StringBuffer
 
   override def nullSafeEval(s: Any, p: Any, r: Any, i: Any): Any = {
-    if (s.toString.contains("$") || p.toString.contains("$")) {
-      val ss = UTF8String.fromString(s.toString.replace(p.toString, r.toString))
-      return ss
+    if (s.toString.indexOf('$') > -1 || p.toString.indexOf('$') > -1) {
+      if (!isRegex(p.toString)) {
+        val ss = UTF8String.fromString(s.toString.replace(p.toString, r.toString))
+        return ss
+      }
     }
     if (!p.equals(lastRegex)) {
       // regex value changed
       lastRegex = p.asInstanceOf[UTF8String].clone()
       val lastRegexStr = lastRegex.toString
-      val array = lastRegexStr.toCharArray
-      val buffer = new StringBuffer()
-      for (i <- 0 until array.length) {
-        if (array(i) == ')' && (i == 0 || array(i - 1) != '\\')) buffer.append("\\")
-        buffer.append(array(i))
+      if (lastRegexStr.indexOf(')') > -1 && !isRegex(lastRegexStr)) {
+        val array = lastRegexStr.toCharArray
+        val buffer = new StringBuffer()
+        for (i <- 0 until array.length) {
+          if (array(i) == ')' && (i == 0 || array(i - 1) != '\\')) buffer.append("\\")
+          buffer.append(array(i))
+        }
+        pattern = Pattern.compile(buffer.toString())
+      } else {
+        pattern = Pattern.compile(lastRegexStr)
       }
-      pattern = Pattern.compile(buffer.toString())
     }
     if (!r.equals(lastReplacementInUTF8)) {
       // replacement string changed
@@ -622,23 +626,48 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     val specialSymbol = "$"
     nullSafeCodeGen(ctx, ev, (subject, regexp, rep, pos) => {
     s"""
-      if ($rep.toString().contains("$specialSymbol") || $regexp.toString()
-        .contains("$specialSymbol")) {
-        ${ev.value} = UTF8String.fromString(
+      Boolean isRegex = true;
+      if ($rep.toString().indexOf('$specialSymbol') > -1 || $regexp.toString()
+        .indexOf('$specialSymbol') > -1) {
+        try {
+          java.util.regex.Pattern.compile($rep.toString());
+          isRegex = true;
+        } catch (java.util.regex.PatternSyntaxException e) {
+          isRegex = false;
+        }
+        if (!isRegex) {
+          ${ev.value} = UTF8String.fromString(
           $subject.toString().replace($regexp.toString(), $rep.toString()));
-      } else {
+        }
+      }
+      if (isRegex) {
         if (!$regexp.equals($termLastRegex)) {
           // regex value changed
           $termLastRegex = $regexp.clone();
-          char[] array = $termLastRegex.toString().toCharArray();
-          StringBuffer buffer = new StringBuffer();
-          for (int k = 0; k < array.length; k++) {
-              if (array[k] == ')' && (k == 0 || array[k - 1] != '\\\\')) {
-                  buffer.append("\\\\");
+          String termLastRegexStr = $termLastRegex.toString();
+          if (termLastRegexStr.indexOf(')') > -1) {
+            try {
+              java.util.regex.Pattern.compile(termLastRegexStr);
+              isRegex = true;
+            } catch (java.util.regex.PatternSyntaxException e) {
+              isRegex = false;
+            }
+            if (!isRegex) {
+              char[] array = termLastRegexStr.toCharArray();
+              StringBuffer buffer = new StringBuffer();
+              for (int k = 0; k < array.length; k++) {
+                  if (array[k] == ')' && (k == 0 || array[k - 1] != '\\\\')) {
+                      buffer.append("\\\\");
+                  }
+                  buffer.append(array[k]);
               }
-              buffer.append(array[k]);
+              $termPattern = $classNamePattern.compile(buffer.toString());
+            } else {
+              $termPattern = $classNamePattern.compile(termLastRegexStr);
+            }
+          } else {
+            $termPattern = $classNamePattern.compile(termLastRegexStr);
           }
-          $termPattern = $classNamePattern.compile(buffer.toString());
         }
         if (!$rep.equals($termLastReplacementInUTF8)) {
           // replacement string changed
@@ -666,6 +695,20 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     """
     })
   }
+
+  def isRegex(input: String): Boolean =
+  {
+    var isRegex = false
+    try {
+      Pattern.compile(input)
+      isRegex = true
+    } catch {
+      case e: PatternSyntaxException =>
+        isRegex = false
+    }
+    isRegex
+  }
+
 
   override def first: Expression = subject
   override def second: Expression = regexp
