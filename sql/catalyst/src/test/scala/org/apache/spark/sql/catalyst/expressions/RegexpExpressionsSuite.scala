@@ -299,12 +299,6 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val p = 'p.string.at(1)
     val r = 'r.string.at(2)
 
-    val regReplaceStr = RegExpReplace(Literal("abc)"), Literal(")"), Literal("vv"))
-    assert(regReplaceStr.eval(null).equals(UTF8String.fromString("abcvv")))
-
-    val regReplaceStr2 = RegExpReplace(Literal("abc$"), Literal("$"), Literal("vv"))
-    assert(regReplaceStr2.eval(null).equals(UTF8String.fromString("abcvv")))
-
     val regReplaceStr3 = RegExpReplace(Literal(""), Literal(""), Literal("vv"))
     assert(regReplaceStr3.eval(null).equals(UTF8String.fromString("vv")))
 
